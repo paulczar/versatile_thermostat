@@ -317,6 +317,9 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
         self._tpi_coef_ext = entry_infos.get(CONF_TPI_COEF_EXT)
         self._tpi_threshold_low = entry_infos.get(CONF_TPI_THRESHOLD_LOW, 0.0)
         self._tpi_threshold_high = entry_infos.get(CONF_TPI_THRESHOLD_HIGH, 0.0)
+        self._hvac_action_auto_threshold = entry_infos.get(
+            CONF_HVAC_ACTION_AUTO_THRESHOLD, DEFAULT_HVAC_ACTION_AUTO_THRESHOLD
+        )
         # If one is 0 then both are 0
         if self._tpi_threshold_low == 0.0 or self._tpi_threshold_high == 0.0:
             self._tpi_threshold_low = 0.0
@@ -874,6 +877,11 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
     def supported_features(self) -> ClimateEntityFeature:
         """Return the list of supported features."""
         return self._support_flags
+
+    @property
+    def hvac_action_auto_threshold(self) -> float:
+        """Return the threshold for inferring hvac_action in AUTO mode"""
+        return self._hvac_action_auto_threshold
 
     @property
     def is_device_active(self) -> bool:
@@ -1556,6 +1564,8 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
             action = HVACAction.IDLE
         elif self.vtherm_hvac_mode == VThermHvacMode_COOL:
             action = HVACAction.COOLING
+        elif self.vtherm_hvac_mode == VThermHvacMode_DRY:
+            action = HVACAction.DRYING
         else:
             action = HVACAction.HEATING
         self._attr_hvac_action = action

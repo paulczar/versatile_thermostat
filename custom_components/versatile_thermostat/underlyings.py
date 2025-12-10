@@ -760,8 +760,22 @@ class UnderlyingClimate(UnderlyingEntity):
             hvac_action = HVACAction.IDLE
             if target is not None and current is not None:
                 dtemp = target - current
+                # Get the configurable threshold for AUTO mode inference
+                auto_threshold = self._thermostat.hvac_action_auto_threshold
 
-                if hvac_mode == VThermHvacMode_COOL and dtemp < 0:
+                # Handle DRY mode - dehumidifier is active
+                if hvac_mode == VThermHvacMode_DRY:
+                    hvac_action = HVACAction.DRYING
+                # Handle AUTO mode - infer action from temperature difference
+                elif hvac_mode == VThermHvacMode_AUTO:
+                    # Use configurable threshold to distinguish active operation from maintenance
+                    # This prevents false positives when system is maintaining temperature
+                    if dtemp < -auto_threshold:  # Target significantly below current = cooling needed
+                        hvac_action = HVACAction.COOLING
+                    elif dtemp > auto_threshold:  # Target significantly above current = heating needed
+                        hvac_action = HVACAction.HEATING
+                    # else stays IDLE (within threshold)
+                elif hvac_mode == VThermHvacMode_COOL and dtemp < 0:
                     hvac_action = HVACAction.COOLING
                 elif hvac_mode in [VThermHvacMode_HEAT, VThermHvacMode_HEAT_COOL] and dtemp > 0:
                     hvac_action = HVACAction.HEATING

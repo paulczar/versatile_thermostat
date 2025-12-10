@@ -81,6 +81,7 @@ CONF_TPI_THRESHOLD_HIGH = "tpi_threshold_high"
 CONF_PRESENCE_SENSOR = "presence_sensor_entity_id"
 CONF_HUMIDITY_SENSOR = "humidity_sensor_entity_id"
 CONF_HUMIDITY_THRESHOLD = "humidity_threshold"
+CONF_HVAC_ACTION_AUTO_THRESHOLD = "hvac_action_auto_threshold"
 CONF_PRESET_POWER = "power_temp"
 CONF_MINIMAL_ACTIVATION_DELAY = "minimal_activation_delay"
 CONF_MINIMAL_DEACTIVATION_DELAY = "minimal_deactivation_delay"
@@ -404,6 +405,7 @@ SERVICE_SET_TPI_PARAMETERS = "set_tpi_parameters"
 
 DEFAULT_SAFETY_MIN_ON_PERCENT = 0.5
 DEFAULT_SAFETY_DEFAULT_ON_PERCENT = 0.1
+DEFAULT_HVAC_ACTION_AUTO_THRESHOLD = 1.0
 
 ATTR_TOTAL_ENERGY = "total_energy"
 ATTR_MEAN_POWER_CYCLE = "mean_cycle_power"
