@@ -69,7 +69,6 @@ STEP_FEATURES_DATA_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
         vol.Optional(CONF_USE_MOTION_FEATURE, default=False): cv.boolean,
         vol.Optional(CONF_USE_POWER_FEATURE, default=False): cv.boolean,
         vol.Optional(CONF_USE_PRESENCE_FEATURE, default=False): cv.boolean,
-        vol.Optional(CONF_USE_HUMIDITY_FEATURE, default=False): cv.boolean,
     }
 )
 
@@ -90,7 +89,6 @@ STEP_CLIMATE_VALVE_FEATURES_DATA_SCHEMA = vol.Schema(  # pylint: disable=invalid
         vol.Optional(CONF_USE_MOTION_FEATURE, default=False): cv.boolean,
         vol.Optional(CONF_USE_POWER_FEATURE, default=False): cv.boolean,
         vol.Optional(CONF_USE_PRESENCE_FEATURE, default=False): cv.boolean,
-        vol.Optional(CONF_USE_HUMIDITY_FEATURE, default=False): cv.boolean,
     }
 )
 

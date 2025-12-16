@@ -167,3 +167,57 @@ async def test_humidity_feature_manager_post_init(
         assert humidity_manager.humidity_threshold == threshold
     else:
         assert humidity_manager.humidity_threshold == 60.0  # Default
+
+
+@pytest.mark.parametrize(
+    "is_configured, requested_mode, hvac_modes_include_dry, is_humidity_too_high, current_temp, target_temp, expected_result",
+    [
+        # Not configured -> False
+        (False, VThermHvacMode_COOL, True, True, 25.0, 22.0, False),
+        # Not COOL mode -> False
+        (True, VThermHvacMode_HEAT, True, True, 25.0, 22.0, False),
+        # DRY mode not available -> False
+        (True, VThermHvacMode_COOL, False, True, 25.0, 22.0, False),
+        # Humidity OK -> False
+        (True, VThermHvacMode_COOL, True, False, 25.0, 22.0, False),
+        # Humidity too high, cooling needed (temp > target + 0.1) -> False
+        (True, VThermHvacMode_COOL, True, True, 25.0, 22.0, False),
+        # Humidity too high, cooling not needed (temp <= target + 0.1) -> True
+        (True, VThermHvacMode_COOL, True, True, 22.0, 22.0, True),
+        (True, VThermHvacMode_COOL, True, True, 22.05, 22.0, True),  # Within 0.1°C threshold
+        (True, VThermHvacMode_COOL, True, True, 22.2, 22.0, False),  # Above 0.1°C threshold
+        # Missing temperature -> False
+        (True, VThermHvacMode_COOL, True, True, None, 22.0, False),
+        (True, VThermHvacMode_COOL, True, True, 25.0, None, False),
+    ],
+)
+async def test_should_use_dry_mode(
+    hass: HomeAssistant,
+    is_configured: bool,
+    requested_mode,
+    hvac_modes_include_dry: bool,
+    is_humidity_too_high: bool,
+    current_temp: float | None,
+    target_temp: float | None,
+    expected_result: bool,
+):
+    """Test the should_use_dry_mode method"""
+    from custom_components.versatile_thermostat.vtherm_hvac_mode import VThermHvacMode_COOL, VThermHvacMode_DRY
+
+    fake_vtherm = MagicMock(spec=BaseThermostat)
+    type(fake_vtherm).name = PropertyMock(return_value="the name")
+    type(fake_vtherm).current_temperature = PropertyMock(return_value=current_temp)
+    type(fake_vtherm).target_temperature = PropertyMock(return_value=target_temp)
+
+    hvac_modes = [VThermHvacMode_COOL]
+    if hvac_modes_include_dry:
+        hvac_modes.append(VThermHvacMode_DRY)
+    type(fake_vtherm).vtherm_hvac_modes = PropertyMock(return_value=hvac_modes)
+
+    humidity_manager = FeatureHumidityManager(fake_vtherm, hass)
+    humidity_manager._is_configured = is_configured
+    humidity_manager._current_humidity = 65.0 if is_humidity_too_high else 50.0
+    humidity_manager._humidity_threshold = 60.0
+
+    result = humidity_manager.should_use_dry_mode(requested_mode)
+    assert result == expected_result

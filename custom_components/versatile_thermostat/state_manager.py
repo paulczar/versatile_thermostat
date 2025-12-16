@@ -12,6 +12,7 @@ from .const import (
     HVAC_OFF_REASON_AUTO_START_STOP,
     HVAC_OFF_REASON_SLEEP_MODE,
     HVAC_OFF_REASON_CENTRAL_MODE,
+    HVAC_REASON_DRY_HUMIDITY_TOO_HIGH,
     CONF_WINDOW_ECO_TEMP,
     CONF_WINDOW_FAN_ONLY,
     CONF_WINDOW_FROST_TEMP,
@@ -149,35 +150,31 @@ class StateManager:
             elif vtherm.vtherm_hvac_mode != VThermHvacMode_HEAT and VThermHvacMode_HEAT in vtherm.vtherm_hvac_modes:
                 self._current_state.set_hvac_mode(VThermHvacMode_HEAT)
 
-        # Check humidity control - switch to DRY mode when humidity is too high and cooling is not needed
-        elif vtherm.humidity_manager.is_configured and vtherm.ac_mode and self._requested_state.hvac_mode == VThermHvacMode_COOL and VThermHvacMode_DRY in vtherm.vtherm_hvac_modes:
-            # Check if cooling is actively needed
-            # If on_percent is low (<= 0.05), cooling is not needed and we can use DRY mode
-            # If on_percent is high (> 0.05), cooling is needed and COOL mode takes priority
-            cooling_needed = False
-            if vtherm.proportional_algorithm and vtherm.proportional_algorithm.on_percent is not None:
-                cooling_needed = vtherm.proportional_algorithm.on_percent > 0.05
-
-            if not cooling_needed and vtherm.humidity_manager.is_humidity_too_high:
-                # Temperature is at target, but humidity is too high - switch to DRY mode
-                _LOGGER.info(
-                    "%s - Humidity too high (%.1f%% > %.1f%%), switching to DRY mode",
-                    vtherm,
-                    vtherm.humidity_manager.current_humidity,
-                    vtherm.humidity_manager.humidity_threshold,
-                )
+        # Check humidity control - delegate business logic to humidity_manager
+        elif vtherm.humidity_manager and vtherm.humidity_manager.is_configured and vtherm.ac_mode and self._requested_state.hvac_mode == VThermHvacMode_COOL:
+            # Let humidity_manager decide if DRY mode should be used
+            # Also verify DRY mode is available as a defensive check
+            if vtherm.humidity_manager.should_use_dry_mode(self._requested_state.hvac_mode) and VThermHvacMode_DRY in vtherm.vtherm_hvac_modes:
                 self._current_state.set_hvac_mode(VThermHvacMode_DRY)
+                # Set reason when current_state differs from requested_state
+                vtherm.set_hvac_reason(HVAC_REASON_DRY_HUMIDITY_TOO_HIGH)
             else:
-                # Cooling is needed or humidity is OK - use requested COOL mode
+                # Use requested COOL mode
                 self._current_state.set_hvac_mode(self._requested_state.hvac_mode)
+                # Clear reason when using requested mode
+                if self._current_state.hvac_mode == self._requested_state.hvac_mode:
+                    vtherm.set_hvac_reason(None)
 
         # all is fine set current_state = requested_state
         else:
             if self._current_state.hvac_mode == VThermHvacMode_OFF and self._requested_state.hvac_mode == VThermHvacMode_OFF:
                 _LOGGER.info("%s - already in OFF. Change the reason to MANUAL", vtherm)
                 vtherm.set_hvac_off_reason(HVAC_OFF_REASON_MANUAL if not vtherm.is_sleeping else HVAC_OFF_REASON_SLEEP_MODE)
-
-            self._current_state.set_hvac_mode(self._requested_state.hvac_mode)
+            else:
+                self._current_state.set_hvac_mode(self._requested_state.hvac_mode)
+                # Clear reason when current_state matches requested_state
+                if self._current_state.hvac_mode == self._requested_state.hvac_mode:
+                    vtherm.set_hvac_reason(None)
 
         # Calculate hvac_off_reason
         if self._current_state.hvac_mode not in [VThermHvacMode_OFF, VThermHvacMode_SLEEP] and vtherm.hvac_off_reason is not None:

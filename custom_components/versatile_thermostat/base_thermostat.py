@@ -86,7 +86,6 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
         .union(FeaturePowerManager.unrecorded_attributes)
         .union(FeatureMotionManager.unrecorded_attributes)
         .union(FeatureWindowManager.unrecorded_attributes)
-        .union(FeatureHumidityManager.unrecorded_attributes)
     )
 
     ##
@@ -124,7 +123,6 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
         # self._saved_hvac_mode = None
 
         self._fan_mode = None
-        self._humidity = None
         self._swing_mode = None
         self._swing_horizontal_mode = None
         self._ac_mode = None
@@ -179,6 +177,7 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
         self._use_central_config_temperature = False
 
         self._hvac_off_reason: str | None = None
+        self._hvac_reason: str | None = None
         self._hvac_list: list[VThermHvacMode] = []
         self._str_hvac_list: list[str] = []
         self._temperature_reason: str | None = None
@@ -194,7 +193,8 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
         # Auto start/stop is only for over_climate
         self._auto_start_stop_manager: FeatureAutoStartStopManager | None = None
         self._lock_manager: FeatureLockManager = FeatureLockManager(self, hass)
-        self._humidity_manager: FeatureHumidityManager = FeatureHumidityManager(self, hass)
+        # Humidity manager is only for over_climate
+        self._humidity_manager: FeatureHumidityManager | None = None
 
         self.register_manager(self._presence_manager)
         self.register_manager(self._power_manager)
@@ -203,7 +203,6 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
         self.register_manager(self._safety_manager)
         self.register_manager(self._safety_manager)
         self.register_manager(self._lock_manager)
-        self.register_manager(self._humidity_manager)
 
         self._cancel_recalculate_later: Callable[[], None] | None = None
 
@@ -335,7 +334,6 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
         self._presets: dict[str, Any] = {}  # presets
         self._presets_away: dict[str, Any] = {}  # presets_away
 
-        self._humidity = None
         self._fan_mode = None
         self._swing_mode = None
         self._swing_horizontal_mode = None
@@ -1097,6 +1095,11 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
         return self._use_central_config_temperature
 
     @property
+    def hvac_reason(self) -> str | None:
+        """Returns the reason for HVAC mode changes (generalized from hvac_off_reason)"""
+        return self._hvac_reason
+
+    @property
     def hvac_off_reason(self) -> str | None:
         """Returns the reason of the last switch to HVAC_OFF
         This is useful for features that turns off the VTherm like
@@ -1383,8 +1386,8 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
         # check auto_window conditions
         await self._window_manager.manage_window_auto(in_cycle=True)
 
-        # Refresh humidity state
-        if await self._humidity_manager.refresh_state():
+        # Refresh humidity state (only for over_climate)
+        if self.is_over_climate and self._humidity_manager and await self._humidity_manager.refresh_state():
             # Humidity changed, force state update
             self.requested_state.force_changed()
             await self.update_states(force=True)
@@ -1508,9 +1511,19 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
         for under in self._underlyings:
             await under.turn_off_and_cancel_cycle()
 
+    def set_hvac_reason(self, hvac_reason: str | None):
+        """Set the reason for HVAC mode changes (generalized from set_hvac_off_reason)"""
+        self._hvac_reason = hvac_reason
+        # Also set hvac_off_reason for backward compatibility when mode is OFF
+        if self.vtherm_hvac_mode == VThermHvacMode_OFF:
+            self._hvac_off_reason = hvac_reason
+
     def set_hvac_off_reason(self, hvac_off_reason: str | None):
-        """Set the reason of hvac_off"""
+        """Set the reason of hvac_off (deprecated, use set_hvac_reason instead)"""
         self._hvac_off_reason = hvac_off_reason
+        # Also set hvac_reason for consistency
+        if hvac_off_reason is not None:
+            self._hvac_reason = hvac_off_reason
 
     def set_temperature_reason(self, temperature_reason: str | None):
         """Set the reason of temperature"""
@@ -1568,38 +1581,47 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
             messages.append(MSG_SAFETY_DETECTED)
         if self.power_manager.is_overpowering_detected:
             messages.append(MSG_OVERPOWERING_DETECTED)
-        if self.hvac_off_reason:
+        if self.hvac_reason:
+            messages.append(self.hvac_reason)
+        elif self.hvac_off_reason:
             messages.append(self.hvac_off_reason)
         if self.temperature_reason:
             messages.append(self.temperature_reason)
+
+        specific_states: dict[str, Any] = {
+            "is_on": self.is_on,
+            "last_central_mode": self.last_central_mode,
+            "last_update_datetime": self.now.isoformat(),
+            "ext_current_temperature": self._cur_ext_temp,
+            "last_temperature_datetime": self._last_temperature_measure.astimezone(self._current_tz).isoformat(),
+            "last_ext_temperature_datetime": self._last_ext_temperature_measure.astimezone(self._current_tz).isoformat(),
+            "is_device_active": self.is_device_active,
+            "device_actives": self.device_actives,
+            "nb_device_actives": self.nb_device_actives,
+            "ema_temp": self._ema_temp,
+            "temperature_slope": round(self.last_temperature_slope or 0, 3),
+            "hvac_reason": self.hvac_reason,
+            "hvac_off_reason": self.hvac_off_reason,
+            ATTR_TOTAL_ENERGY: self.total_energy,
+            "last_change_time_from_vtherm": (
+                self._last_change_time_from_vtherm.astimezone(self._current_tz).isoformat() if self._last_change_time_from_vtherm is not None else None
+            ),
+            "messages": messages,
+            "is_sleeping": self.is_sleeping,
+            "is_locked": self.lock_manager.is_locked,
+            "is_recalculate_scheduled": self.is_recalculate_scheduled,
+        }
+
+        # Add current_humidity if humidity_manager is configured (only for over_climate)
+        if self.is_over_climate and self.humidity_manager and self.humidity_manager.is_configured:
+            specific_states["current_humidity"] = self.humidity_manager.current_humidity
 
         self._attr_extra_state_attributes: dict[str, Any] = {
             "hvac_action": self.hvac_action,
             "hvac_mode": self.hvac_mode,
             "preset_mode": self.preset_mode,
             "ema_temp": self._ema_temp,
-            "specific_states": {
-                "is_on": self.is_on,
-                "last_central_mode": self.last_central_mode,
-                "last_update_datetime": self.now.isoformat(),
-                "ext_current_temperature": self._cur_ext_temp,
-                "last_temperature_datetime": self._last_temperature_measure.astimezone(self._current_tz).isoformat(),
-                "last_ext_temperature_datetime": self._last_ext_temperature_measure.astimezone(self._current_tz).isoformat(),
-                "is_device_active": self.is_device_active,
-                "device_actives": self.device_actives,
-                "nb_device_actives": self.nb_device_actives,
-                "ema_temp": self._ema_temp,
-                "temperature_slope": round(self.last_temperature_slope or 0, 3),
-                "hvac_off_reason": self.hvac_off_reason,
-                ATTR_TOTAL_ENERGY: self.total_energy,
-                "last_change_time_from_vtherm": (
-                    self._last_change_time_from_vtherm.astimezone(self._current_tz).isoformat() if self._last_change_time_from_vtherm is not None else None
-                ),
-                "messages": messages,
-                "is_sleeping": self.is_sleeping,
-                "is_locked": self.lock_manager.is_locked,
-                "is_recalculate_scheduled": self.is_recalculate_scheduled,
-            },
+            "specific_states": specific_states,
             "configuration": {
                 "ac_mode": self._ac_mode,
                 "type": self.vtherm_type,

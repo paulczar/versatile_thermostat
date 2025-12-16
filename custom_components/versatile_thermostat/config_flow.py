@@ -91,7 +91,12 @@ class VersatileThermostatBaseConfigFlow(FlowHandler):
         )
         self._infos[CONF_USE_PRESENCE_FEATURE] = self._infos.get(CONF_USE_PRESENCE_CENTRAL_CONFIG, False) or self._infos.get(CONF_PRESENCE_SENSOR) is not None
 
-        self._infos[CONF_USE_HUMIDITY_FEATURE] = self._infos.get(CONF_USE_HUMIDITY_CENTRAL_CONFIG, False) or self._infos.get(CONF_HUMIDITY_SENSOR) is not None
+        # Humidity feature is only for over_climate (not valve regulation)
+        is_climate_type = self._infos.get(CONF_THERMOSTAT_TYPE) == CONF_THERMOSTAT_CLIMATE
+        is_valve_regulation = self.is_valve_regulation_selected(self._infos)
+        self._infos[CONF_USE_HUMIDITY_FEATURE] = (is_climate_type and not is_valve_regulation) and (
+            self._infos.get(CONF_USE_HUMIDITY_CENTRAL_CONFIG, False) or self._infos.get(CONF_HUMIDITY_SENSOR) is not None
+        )
 
         self._infos[CONF_USE_CENTRAL_BOILER_FEATURE] = (
             self._infos.get(CONF_CENTRAL_BOILER_ACTIVATION_SRV) is not None and self._infos.get(CONF_CENTRAL_BOILER_DEACTIVATION_SRV) is not None
@@ -453,7 +458,12 @@ class VersatileThermostatBaseConfigFlow(FlowHandler):
 
         if self._infos.get(CONF_USE_PRESENCE_FEATURE, False) is True:
             menu_options.append("presence")
-        if self._infos.get(CONF_USE_HUMIDITY_FEATURE, False) is True:
+        # Humidity feature is only for over_climate (not valve regulation)
+        if (
+            self._infos.get(CONF_USE_HUMIDITY_FEATURE, False) is True
+            and self._infos.get(CONF_THERMOSTAT_TYPE) == CONF_THERMOSTAT_CLIMATE
+            and not self.is_valve_regulation_selected(self._infos)
+        ):
             menu_options.append("humidity")
 
         if (
@@ -773,8 +783,15 @@ class VersatileThermostatBaseConfigFlow(FlowHandler):
         return await self.generic_step("presence", schema, user_input, next_step)
 
     async def async_step_humidity(self, user_input: dict | None = None) -> FlowResult:
-        """Handle the humidity management flow steps"""
+        """Handle the humidity management flow steps (only for over_climate, not valve regulation)"""
         _LOGGER.debug("Into ConfigFlow.async_step_humidity user_input=%s", user_input)
+
+        # Humidity feature is only for over_climate (not valve regulation)
+        if self._infos.get(CONF_THERMOSTAT_TYPE) != CONF_THERMOSTAT_CLIMATE and self._infos.get(CONF_THERMOSTAT_TYPE) != CONF_THERMOSTAT_CENTRAL_CONFIG:
+            return self.async_abort(reason="humidity_not_supported")
+
+        if self._infos.get(CONF_THERMOSTAT_TYPE) == CONF_THERMOSTAT_CLIMATE and self.is_valve_regulation_selected(self._infos):
+            return self.async_abort(reason="humidity_not_supported")
 
         next_step = self.async_step_menu
         if self._infos[CONF_THERMOSTAT_TYPE] == CONF_THERMOSTAT_CENTRAL_CONFIG:

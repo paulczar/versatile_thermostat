@@ -630,6 +630,11 @@
               "none": "Manuel",
               "frost": "Hors Gel"
             }
+          },
+          "hvac_reason": {
+            "state": {
+              "hvac_dry_humidity_too_high": "DRY mode: Humidity too high"
+            }
           }
         }
       }

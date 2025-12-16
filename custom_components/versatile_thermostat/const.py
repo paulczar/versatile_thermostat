@@ -200,12 +200,14 @@ TYPE_AUTO_START_STOP_LEVELS = Literal[  # pylint: disable=invalid-name
 ]
 
 HVAC_OFF_REASON_NAME = "hvac_off_reason"
+HVAC_REASON_NAME = "hvac_reason"
 HVAC_OFF_REASON_MANUAL = "hvac_off_manual"
 HVAC_OFF_REASON_AUTO_START_STOP = "hvac_off_auto_start_stop"
 HVAC_OFF_REASON_WINDOW_DETECTION = "hvac_off_window_detection"
 HVAC_OFF_REASON_SLEEP_MODE = "hvac_off_sleep_mode"
 HVAC_OFF_REASON_SAFETY = "hvac_off_safety_detection"
 HVAC_OFF_REASON_CENTRAL_MODE = "hvac_off_central_mode"
+HVAC_REASON_DRY_HUMIDITY_TOO_HIGH = "hvac_dry_humidity_too_high"
 HVAC_OFF_REASONS = Literal[  # pylint: disable=invalid-name
     HVAC_OFF_REASON_MANUAL, HVAC_OFF_REASON_AUTO_START_STOP, HVAC_OFF_REASON_WINDOW_DETECTION, HVAC_OFF_REASON_SLEEP_MODE, HVAC_OFF_REASON_SAFETY
 ]

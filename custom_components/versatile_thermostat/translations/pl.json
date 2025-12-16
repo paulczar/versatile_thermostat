@@ -253,9 +253,9 @@
           "opening_degree_entity_ids": "Encje stopnia otwarcia",
           "closing_degree_entity_ids": "Encje stopnia zamknięcia",
           "proportional_function": "Algorytm",
-          "opening_threshold_degree": "Próg otwarcia zaworu",          
+          "opening_threshold_degree": "Próg otwarcia zaworu",
           "min_opening_degrees": "Minimalny stopień otwarcia",
-          "max_closing_degree": "Maksymalny stopień zamknięcia"          
+          "max_closing_degree": "Maksymalny stopień zamknięcia"
         },
         "data_description": {
           "offset_calibration_entity_ids": "Lista encji kalibracji. Ustaw, jeśli zawór wyposażony jest w encję korekty regulacji. Dla każdego termostatu powinna istnieć maksymalnie jedna taka encja",
@@ -476,7 +476,7 @@
           "max_power_sensor_entity_id": "Identyfikator encji sensora energii maksymalnej",
           "power_temp": "Temperatura progowa redukująca zużycie energii",
           "use_power_central_config": "Wybierz, aby użyć centralnej konfiguracji energii. Wyłącz wybór, aby użyć konfiguracji energii dedykowanej dla tego termostatu"
-        }      
+        }
       },
       "presence": {
         "title": "Obecność - {name}",
@@ -623,6 +623,11 @@
               "safety": "Bezpieczny",
               "none": "Ręczny",
               "frost": "Ochrona przed mrozem"
+            }
+          },
+          "hvac_reason": {
+            "state": {
+              "hvac_dry_humidity_too_high": "DRY mode: Humidity too high"
             }
           }
         }

@@ -10,6 +10,7 @@ from custom_components.versatile_thermostat.state_manager import StateManager
 from custom_components.versatile_thermostat.vtherm_state import VThermState
 from custom_components.versatile_thermostat.vtherm_hvac_mode import VThermHvacMode_OFF, VThermHvacMode_HEAT, VThermHvacMode_COOL, VThermHvacMode_DRY
 from custom_components.versatile_thermostat.vtherm_preset import VThermPreset
+from custom_components.versatile_thermostat.const import HVAC_REASON_DRY_HUMIDITY_TOO_HIGH
 
 from .commons import *  # pylint: disable=wildcard-import, unused-wildcard-import
 
@@ -474,25 +475,21 @@ async def test_state_manager_calculate_current_target_temperature(
 
 
 @pytest.mark.parametrize(
-    "ac_mode, requested_hvac_mode, is_humidity_configured, is_humidity_too_high, on_percent, hvac_modes_include_dry, expected_hvac_mode",
+    "ac_mode, requested_hvac_mode, is_humidity_configured, should_use_dry, hvac_modes_include_dry, expected_hvac_mode, expected_hvac_reason",
     # fmt: off
     [
-        # AC mode, COOL requested, humidity configured, humidity too high, cooling not needed -> DRY
-        (True,  VThermHvacMode_COOL, True,  True,  0.0,   True,  VThermHvacMode_DRY),
-        # AC mode, COOL requested, humidity configured, humidity too high, cooling needed -> COOL (priority)
-        (True,  VThermHvacMode_COOL, True,  True,  0.1,   True,  VThermHvacMode_COOL),
-        # AC mode, COOL requested, humidity configured, humidity OK -> COOL
-        (True,  VThermHvacMode_COOL, True,  False, 0.0,   True,  VThermHvacMode_COOL),
+        # AC mode, COOL requested, humidity configured, should use DRY -> DRY
+        (True,  VThermHvacMode_COOL, True,  True,   True,  VThermHvacMode_DRY, HVAC_REASON_DRY_HUMIDITY_TOO_HIGH),
+        # AC mode, COOL requested, humidity configured, should not use DRY -> COOL
+        (True,  VThermHvacMode_COOL, True,  False,  True,  VThermHvacMode_COOL, None),
         # AC mode, COOL requested, humidity not configured -> COOL
-        (True,  VThermHvacMode_COOL, False, False, 0.0,   True,  VThermHvacMode_COOL),
+        (True,  VThermHvacMode_COOL, False, False,  True,  VThermHvacMode_COOL, None),
         # Not AC mode -> COOL (humidity control doesn't apply)
-        (False, VThermHvacMode_COOL, True,  True,  0.0,   True,  VThermHvacMode_COOL),
+        (False, VThermHvacMode_COOL, True,  True,   True,  VThermHvacMode_COOL, None),
         # HEAT requested -> HEAT (humidity control doesn't apply)
-        (True,  VThermHvacMode_HEAT, True,  True,  0.0,   True,  VThermHvacMode_HEAT),
+        (True,  VThermHvacMode_HEAT, True,  True,   True,  VThermHvacMode_HEAT, None),
         # DRY mode not available -> COOL
-        (True,  VThermHvacMode_COOL, True,  True,  0.0,   False, VThermHvacMode_COOL),
-        # Cooling needed (on_percent > 0.05) -> COOL takes priority
-        (True,  VThermHvacMode_COOL, True,  True,  0.06,  True,  VThermHvacMode_COOL),
+        (True,  VThermHvacMode_COOL, True,  True,   False, VThermHvacMode_COOL, None),
     ],
     # fmt: on
 )
@@ -501,15 +498,15 @@ async def test_state_manager_humidity_control(
     ac_mode: bool,
     requested_hvac_mode: VThermHvacMode,
     is_humidity_configured: bool,
-    is_humidity_too_high: bool,
-    on_percent: float,
+    should_use_dry: bool,
     hvac_modes_include_dry: bool,
     expected_hvac_mode: VThermHvacMode,
+    expected_hvac_reason: str | None,
 ) -> None:
     """Test the state manager's humidity control integration."""
     fake_vtherm = MagicMock(spec=BaseThermostat)
     type(fake_vtherm).name = PropertyMock(return_value="the name")
-    type(fake_vtherm).is_over_climate = PropertyMock(return_value=False)
+    type(fake_vtherm).is_over_climate = PropertyMock(return_value=True)  # Humidity only for over_climate
     type(fake_vtherm).is_sleeping = PropertyMock(return_value=False)
     type(fake_vtherm).hvac_off_reason = PropertyMock(return_value=None)
     type(fake_vtherm).ac_mode = PropertyMock(return_value=ac_mode)
@@ -520,6 +517,7 @@ async def test_state_manager_humidity_control(
         hvac_modes.append(VThermHvacMode_DRY)
     type(fake_vtherm).vtherm_hvac_modes = PropertyMock(return_value=hvac_modes)
 
+    fake_vtherm.set_hvac_reason = MagicMock()
     fake_vtherm.set_hvac_off_reason = MagicMock()
 
     state_manager = StateManager()
@@ -541,16 +539,17 @@ async def test_state_manager_humidity_control(
 
     fake_vtherm.humidity_manager = MagicMock()
     type(fake_vtherm.humidity_manager).is_configured = PropertyMock(return_value=is_humidity_configured)
-    type(fake_vtherm.humidity_manager).is_humidity_too_high = PropertyMock(return_value=is_humidity_too_high)
-    type(fake_vtherm.humidity_manager).current_humidity = PropertyMock(return_value=65.0 if is_humidity_too_high else 50.0)
-    type(fake_vtherm.humidity_manager).humidity_threshold = PropertyMock(return_value=60.0)
-
-    # Mock proportional algorithm
-    fake_vtherm.proportional_algorithm = MagicMock()
-    type(fake_vtherm.proportional_algorithm).on_percent = PropertyMock(return_value=on_percent)
+    fake_vtherm.humidity_manager.should_use_dry_mode = MagicMock(return_value=should_use_dry)
 
     ret = await state_manager.calculate_current_hvac_mode(fake_vtherm)
 
     assert state_manager.current_state.hvac_mode == expected_hvac_mode
     # Should return True if mode changed
     assert ret == (expected_hvac_mode != VThermHvacMode_OFF)
+
+    # Verify hvac_reason is set correctly
+    if expected_hvac_reason:
+        fake_vtherm.set_hvac_reason.assert_called_with(expected_hvac_reason)
+    elif is_humidity_configured and ac_mode and requested_hvac_mode == VThermHvacMode_COOL:
+        # If humidity is configured and we're using COOL mode, reason should be cleared
+        fake_vtherm.set_hvac_reason.assert_called_with(None)
