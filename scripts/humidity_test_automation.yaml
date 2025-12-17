@@ -1,0 +1,197 @@
+# Home Assistant Automation Script for Humidity Control Testing
+#
+# This script can be added to your Home Assistant configuration.yaml or created
+# as a script in the UI. It automates the test scenarios for humidity control.
+#
+# Usage:
+#   1. Update the entity IDs below to match your setup
+#   2. Call the script: service: script.humidity_control_test
+#
+# Note: This is a simplified version. For more detailed logging and results,
+# use the Python script: scripts/test_humidity_control.py
+
+script:
+  humidity_control_test:
+    alias: "Humidity Control Feature Test"
+    description: "Automated test suite for humidity control feature"
+    icon: mdi:test-tube
+    sequence:
+      # Configuration - UPDATE THESE ENTITIES
+      - variables:
+          thermostat_entity: "climate.butlers_pantry_ac_versatile"  # Update to your thermostat
+          humidity_sensor: "input_number.test_humidity"   # Update to your sensor
+          humidity_threshold: 60.0
+          # Calculate wait time from thermostat cycle_min to prevent short cycling
+          # Default cycle_min is 5 minutes, wait 1.5 cycles = 7.5 minutes = 450 seconds
+          cycle_min: "{{ state_attr(thermostat_entity, 'configuration.cycle_min') | default(5, true) }}"
+          wait_seconds: "{{ (cycle_min | int * 60 * 1.5) | int }}"  # 1.5x cycle time in seconds
+          max_wait_seconds: "{{ (cycle_min | int * 60 * 3) | int }}"  # 3x cycle time max wait
+
+      # Test Scenario 1: DRY Mode Activation
+      - alias: "Scenario 1: Setup - COOL mode, temp at target, humidity below threshold"
+        service: climate.set_hvac_mode
+        target:
+          entity_id: "{{ thermostat_entity }}"
+        data:
+          hvac_mode: cool
+
+      - delay: "{{ wait_seconds }}"
+
+      - alias: "Set target temperature to match current"
+        service: climate.set_temperature
+        target:
+          entity_id: "{{ thermostat_entity }}"
+        data:
+          temperature: "{{ state_attr(thermostat_entity, 'current_temperature') | float }}"
+
+      - delay: "{{ wait_seconds }}"
+
+      - alias: "Set humidity below threshold"
+        service: input_number.set_value
+        target:
+          entity_id: "{{ humidity_sensor }}"
+        data:
+          value: 55.0
+
+      - delay: "{{ wait_seconds }}"
+
+      - alias: "Increase humidity above threshold"
+        service: input_number.set_value
+        target:
+          entity_id: "{{ humidity_sensor }}"
+        data:
+          value: 65.0
+
+      - delay: "{{ wait_seconds }}"
+
+      - alias: "Wait for DRY mode activation (up to max_wait_seconds)"
+        wait_template: "{{ states(thermostat_entity) == 'dry' }}"
+        timeout: "{{ max_wait_seconds }}"
+
+      - alias: "Verify DRY mode activated"
+        condition: template
+        value_template: "{{ states(thermostat_entity) == 'dry' }}"
+
+      # Test Scenario 2: COOL Mode Priority
+      - alias: "Scenario 2: Lower target temperature to require cooling"
+        service: climate.set_temperature
+        target:
+          entity_id: "{{ thermostat_entity }}"
+        data:
+          temperature: "{{ (state_attr(thermostat_entity, 'current_temperature') | float) - 2.0 }}"
+
+      - delay: "{{ wait_seconds }}"
+
+      - alias: "Wait for COOL mode activation (up to max_wait_seconds)"
+        wait_template: "{{ states(thermostat_entity) == 'cool' }}"
+        timeout: "{{ max_wait_seconds }}"
+
+      - alias: "Verify COOL mode takes priority"
+        condition: template
+        value_template: "{{ states(thermostat_entity) == 'cool' }}"
+
+      # Test Scenario 3: DRY Mode Deactivation
+      - alias: "Scenario 3: Set target back to current temperature"
+        service: climate.set_temperature
+        target:
+          entity_id: "{{ thermostat_entity }}"
+        data:
+          temperature: "{{ state_attr(thermostat_entity, 'current_temperature') | float }}"
+
+      - delay: "{{ wait_seconds }}"
+
+      - alias: "Wait for DRY mode (one cycle)"
+        delay: "{{ wait_seconds }}"
+
+      - alias: "Decrease humidity below threshold"
+        service: input_number.set_value
+        target:
+          entity_id: "{{ humidity_sensor }}"
+        data:
+          value: 55.0
+
+      - delay: "{{ wait_seconds }}"
+
+      - alias: "Wait for COOL mode reactivation (up to max_wait_seconds)"
+        wait_template: "{{ states(thermostat_entity) == 'cool' }}"
+        timeout: "{{ max_wait_seconds }}"
+
+      - alias: "Verify COOL mode reactivated"
+        condition: template
+        value_template: "{{ states(thermostat_entity) == 'cool' }}"
+
+      # Test Scenario 4: Temperature Threshold
+      - alias: "Scenario 4: Test temperature threshold (at target)"
+        service: climate.set_temperature
+        target:
+          entity_id: "{{ thermostat_entity }}"
+        data:
+          temperature: "{{ state_attr(thermostat_entity, 'current_temperature') | float }}"
+
+      - delay: "{{ wait_seconds * 2 }}"
+
+      - alias: "Set high humidity"
+        service: input_number.set_value
+        target:
+          entity_id: "{{ humidity_sensor }}"
+        data:
+          value: 65.0
+
+      - delay: "{{ wait_seconds }}"
+
+      - alias: "Wait for DRY mode at target temperature (up to max_wait_seconds)"
+        wait_template: "{{ states(thermostat_entity) == 'dry' }}"
+        timeout: "{{ max_wait_seconds }}"
+
+      - alias: "Verify DRY mode at target temperature"
+        condition: template
+        value_template: "{{ states(thermostat_entity) == 'dry' }}"
+
+      - alias: "Lower target by 0.2°C to require cooling"
+        service: climate.set_temperature
+        target:
+          entity_id: "{{ thermostat_entity }}"
+        data:
+          temperature: "{{ (state_attr(thermostat_entity, 'current_temperature') | float) - 0.2 }}"
+
+      - delay: "{{ wait_seconds }}"
+
+      - alias: "Wait for COOL mode when cooling needed (up to max_wait_seconds)"
+        wait_template: "{{ states(thermostat_entity) == 'cool' }}"
+        timeout: "{{ max_wait_seconds }}"
+
+      - alias: "Verify COOL mode when cooling needed"
+        condition: template
+        value_template: "{{ states(thermostat_entity) == 'cool' }}"
+
+      # Test Scenario 5: Non-COOL Mode Ignored
+      - alias: "Scenario 5: Set to HEAT mode with high humidity"
+        service: climate.set_hvac_mode
+        target:
+          entity_id: "{{ thermostat_entity }}"
+        data:
+          hvac_mode: heat
+
+      - delay: "{{ wait_seconds }}"
+
+      - alias: "Set high humidity"
+        service: input_number.set_value
+        target:
+          entity_id: "{{ humidity_sensor }}"
+        data:
+          value: 70.0
+
+      - delay: "{{ wait_seconds }}"
+
+      - alias: "Wait to ensure no change"
+        delay: "{{ wait_seconds }}"
+
+      - alias: "Verify HEAT mode remains"
+        condition: template
+        value_template: "{{ states(thermostat_entity) == 'heat' }}"
+
+      - alias: "Test Complete"
+        service: system_log.write
+        data:
+          message: "Humidity Control Feature Tests Completed Successfully"
+          level: info

@@ -1589,27 +1589,27 @@ class BaseThermostat(ClimateEntity, RestoreEntity, Generic[T]):
             messages.append(self.temperature_reason)
 
         specific_states: dict[str, Any] = {
-            "is_on": self.is_on,
-            "last_central_mode": self.last_central_mode,
-            "last_update_datetime": self.now.isoformat(),
-            "ext_current_temperature": self._cur_ext_temp,
-            "last_temperature_datetime": self._last_temperature_measure.astimezone(self._current_tz).isoformat(),
-            "last_ext_temperature_datetime": self._last_ext_temperature_measure.astimezone(self._current_tz).isoformat(),
-            "is_device_active": self.is_device_active,
-            "device_actives": self.device_actives,
-            "nb_device_actives": self.nb_device_actives,
-            "ema_temp": self._ema_temp,
-            "temperature_slope": round(self.last_temperature_slope or 0, 3),
+                "is_on": self.is_on,
+                "last_central_mode": self.last_central_mode,
+                "last_update_datetime": self.now.isoformat(),
+                "ext_current_temperature": self._cur_ext_temp,
+                "last_temperature_datetime": self._last_temperature_measure.astimezone(self._current_tz).isoformat(),
+                "last_ext_temperature_datetime": self._last_ext_temperature_measure.astimezone(self._current_tz).isoformat(),
+                "is_device_active": self.is_device_active,
+                "device_actives": self.device_actives,
+                "nb_device_actives": self.nb_device_actives,
+                "ema_temp": self._ema_temp,
+                "temperature_slope": round(self.last_temperature_slope or 0, 3),
             "hvac_reason": self.hvac_reason,
-            "hvac_off_reason": self.hvac_off_reason,
-            ATTR_TOTAL_ENERGY: self.total_energy,
-            "last_change_time_from_vtherm": (
-                self._last_change_time_from_vtherm.astimezone(self._current_tz).isoformat() if self._last_change_time_from_vtherm is not None else None
-            ),
-            "messages": messages,
-            "is_sleeping": self.is_sleeping,
-            "is_locked": self.lock_manager.is_locked,
-            "is_recalculate_scheduled": self.is_recalculate_scheduled,
+                "hvac_off_reason": self.hvac_off_reason,
+                ATTR_TOTAL_ENERGY: self.total_energy,
+                "last_change_time_from_vtherm": (
+                    self._last_change_time_from_vtherm.astimezone(self._current_tz).isoformat() if self._last_change_time_from_vtherm is not None else None
+                ),
+                "messages": messages,
+                "is_sleeping": self.is_sleeping,
+                "is_locked": self.lock_manager.is_locked,
+                "is_recalculate_scheduled": self.is_recalculate_scheduled,
         }
 
         # Add current_humidity if humidity_manager is configured (only for over_climate)

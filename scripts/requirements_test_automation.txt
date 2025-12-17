@@ -1,0 +1,4 @@
+# Requirements for automated humidity control testing script
+# Install with: pip install -r scripts/requirements_test_automation.txt
+
+homeassistant-api>=0.0.1
