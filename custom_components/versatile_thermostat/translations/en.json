@@ -225,11 +225,13 @@
         "data": {
           "humidity_sensor_entity_id": "Humidity sensor",
           "humidity_threshold": "Humidity threshold (%)",
+          "humidity_auto_switch": "Automatically switch between DRY and COOL modes",
           "use_humidity_central_config": "Use central humidity configuration"
         },
         "data_description": {
           "humidity_sensor_entity_id": "Humidity sensor entity id (percentage)",
           "humidity_threshold": "Humidity threshold in percentage. When humidity exceeds this value and cooling is not needed, AC will switch to DRY mode",
+          "humidity_auto_switch": "When enabled, automatically switches between DRY and COOL modes based on humidity and temperature conditions. When disabled, humidity monitoring still works but mode switching is manual",
           "use_humidity_central_config": "Check to use the central humidity configuration. Uncheck to use a specific humidity configuration for this VTherm"
         }
       },
@@ -505,11 +507,13 @@
         "data": {
           "humidity_sensor_entity_id": "Humidity sensor",
           "humidity_threshold": "Humidity threshold (%)",
+          "humidity_auto_switch": "Automatically switch between DRY and COOL modes",
           "use_humidity_central_config": "Use central humidity configuration"
         },
         "data_description": {
           "humidity_sensor_entity_id": "Humidity sensor entity id (percentage)",
           "humidity_threshold": "Humidity threshold in percentage. When humidity exceeds this value and cooling is not needed, AC will switch to DRY mode",
+          "humidity_auto_switch": "When enabled, automatically switches between DRY and COOL modes based on humidity and temperature conditions. When disabled, humidity monitoring still works but mode switching is manual",
           "use_humidity_central_config": "Check to use the central humidity configuration. Uncheck to use a specific humidity configuration for this VTherm"
         }
       },

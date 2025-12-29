@@ -43,6 +43,7 @@ class FeatureHumidityManager(BaseFeatureManager):
         self._humidity_sensor_entity_id: str = None
         self._current_humidity: float | None = None
         self._humidity_threshold: float = 60.0  # Default threshold
+        self._humidity_auto_switch: bool = True  # Default: enable auto-switching
         self._is_configured: bool = False
 
     @overrides
@@ -50,6 +51,7 @@ class FeatureHumidityManager(BaseFeatureManager):
         """Reinit of the manager"""
         self._humidity_sensor_entity_id = entry_infos.get(CONF_HUMIDITY_SENSOR)
         self._humidity_threshold = entry_infos.get(CONF_HUMIDITY_THRESHOLD, 60.0)
+        self._humidity_auto_switch = entry_infos.get(CONF_HUMIDITY_AUTO_SWITCH, True)
 
         if entry_infos.get(CONF_USE_HUMIDITY_FEATURE, False) and self._humidity_sensor_entity_id is not None:
             self._is_configured = True
@@ -127,6 +129,7 @@ class FeatureHumidityManager(BaseFeatureManager):
                         "humidity_sensor_entity_id": self._humidity_sensor_entity_id,
                         "current_humidity": self._current_humidity,
                         "humidity_threshold": self._humidity_threshold,
+                        "humidity_auto_switch": self._humidity_auto_switch,
                         "is_humidity_too_high": self.is_humidity_too_high,
                     }
                 }
@@ -160,10 +163,16 @@ class FeatureHumidityManager(BaseFeatureManager):
         """Return the humidity sensor entity ID"""
         return self._humidity_sensor_entity_id
 
+    @property
+    def humidity_auto_switch(self) -> bool:
+        """Return True if automatic DRY/COOL switching is enabled"""
+        return self._humidity_auto_switch
+
     def should_use_dry_mode(self, requested_hvac_mode) -> bool:
         """Determine if DRY mode should be used instead of COOL mode.
 
         Business rule: Use DRY mode when:
+        - Auto-switch is enabled
         - Humidity is too high
         - Requested mode is COOL
         - Temperature is close to target (cooling not actively needed)
@@ -171,6 +180,10 @@ class FeatureHumidityManager(BaseFeatureManager):
         Returns True if DRY mode should be used, False otherwise.
         """
         if not self._is_configured:
+            return False
+
+        # Check if auto-switching is enabled
+        if not self._humidity_auto_switch:
             return False
 
         # Only applicable for COOL mode

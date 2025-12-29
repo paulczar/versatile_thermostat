@@ -384,6 +384,7 @@ STEP_CENTRAL_HUMIDITY_DATA_SCHEMA = vol.Schema(  # pylint: disable=invalid-name
         vol.Required(CONF_HUMIDITY_THRESHOLD, default=60.0): selector.NumberSelector(
             selector.NumberSelectorConfig(min=0.0, max=100.0, step=1.0, mode=selector.NumberSelectorMode.BOX)
         ),
+        vol.Required(CONF_HUMIDITY_AUTO_SWITCH, default=True): cv.boolean,
     }
 )
 

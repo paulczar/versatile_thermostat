@@ -131,31 +131,65 @@ class HumidityTestRunner:
             logger.error(f"Error calling {domain}.{service}: {e}")
             raise
 
+    async def get_diagnostic_info(self, entity_id: str) -> Dict[str, Any]:
+        """Get diagnostic information about thermostat state."""
+        diagnostics = {}
+        try:
+            diagnostics["hvac_mode"] = await self.get_attribute(entity_id, "hvac_mode")
+            diagnostics["current_temperature"] = await self.get_attribute(entity_id, "current_temperature")
+            diagnostics["target_temperature"] = await self.get_attribute(entity_id, "temperature")
+            diagnostics["current_humidity"] = await self.get_attribute(entity_id, "humidity_manager.current_humidity")
+            diagnostics["is_humidity_too_high"] = await self.get_attribute(entity_id, "humidity_manager.is_humidity_too_high")
+            diagnostics["hvac_reason"] = await self.get_attribute(entity_id, "specific_states.hvac_reason")
+
+            # Calculate temperature difference
+            if diagnostics["current_temperature"] is not None and diagnostics["target_temperature"] is not None:
+                temp_diff = diagnostics["current_temperature"] - diagnostics["target_temperature"]
+                diagnostics["temp_diff"] = round(temp_diff, 2)
+        except Exception as e:
+            logger.debug(f"Error getting diagnostic info: {e}")
+        return diagnostics
+
     async def wait_for_state(
         self,
         entity_id: str,
         attribute_path: str,
         expected_value: Any,
         timeout: int = None,
-        comparison: str = "equals"
+        comparison: str = "equals",
+        show_diagnostics: bool = False
     ) -> bool:
         """Wait for an attribute to reach expected value."""
         timeout = timeout or self.config["max_wait_time"]
         start_time = asyncio.get_event_loop().time()
         last_log_time = start_time
         check_interval = 30  # Log progress every 30 seconds
+        last_value = None
+        current_value = None  # Initialize to avoid unbound error
 
         while (asyncio.get_event_loop().time() - start_time) < timeout:
             current_time = asyncio.get_event_loop().time()
             elapsed = current_time - start_time
             remaining = timeout - elapsed
 
+            current_value = await self.get_attribute(entity_id, attribute_path)
+
             # Log progress every check_interval seconds
             if current_time - last_log_time >= check_interval:
-                logger.info(f"  Still waiting... ({elapsed:.0f}s elapsed, {remaining:.0f}s remaining)")
+                if show_diagnostics:
+                    # Get diagnostic information
+                    diag = await self.get_diagnostic_info(entity_id)
+                    diag_str = ", ".join([f"{k}={v}" for k, v in diag.items() if v is not None])
+                    value_changed = " (changed)" if current_value != last_value else ""
+                    logger.info(f"  Still waiting... ({elapsed:.0f}s elapsed, {remaining:.0f}s remaining){value_changed}")
+                    logger.info(f"    Current: {attribute_path}={current_value}, Expected: {expected_value}")
+                    logger.info(f"    Diagnostics: {diag_str}")
+                else:
+                    value_changed = " (changed)" if current_value != last_value else ""
+                    logger.info(f"  Still waiting... ({elapsed:.0f}s elapsed, {remaining:.0f}s remaining){value_changed}")
+                    logger.info(f"    Current: {attribute_path}={current_value}, Expected: {expected_value}")
                 last_log_time = current_time
-
-            current_value = await self.get_attribute(entity_id, attribute_path)
+                last_value = current_value
 
             if comparison == "equals":
                 if current_value == expected_value:
@@ -176,8 +210,15 @@ class HumidityTestRunner:
 
             await asyncio.sleep(2)  # Check every 2 seconds
 
+        # On timeout, show final diagnostic state
+        if show_diagnostics:
+            diag = await self.get_diagnostic_info(entity_id)
+            diag_str = ", ".join([f"{k}={v}" for k, v in diag.items() if v is not None])
+            logger.error(f"  Final state: {diag_str}")
+
         logger.error(f"  ⏱️  TIMEOUT ERROR: Waited {timeout} seconds ({timeout/60:.1f} minutes) but target state not reached")
         logger.error(f"  Expected: {attribute_path} = {expected_value}")
+        logger.error(f"  Actual: {attribute_path} = {current_value}")
         logger.error(f"  This exceeds the expected wait time (1.5x cycle = {self.config['wait_time']}s). Something may be wrong.")
         return False
 
@@ -292,7 +333,8 @@ class HumidityTestRunner:
                 self.config["thermostat_entity"],
                 "hvac_mode",
                 "dry",
-                timeout=self.config["max_wait_time"]
+                timeout=self.config["max_wait_time"],
+                show_diagnostics=True  # Show diagnostic info during wait
             )
 
             if dry_activated:
@@ -322,11 +364,16 @@ class HumidityTestRunner:
                     }
                 )
             else:
+                # Get diagnostic info for failure report
+                diag = await self.get_diagnostic_info(self.config["thermostat_entity"])
                 self.log_result(
                     scenario, "DRY Mode Activation",
                     False,
                     "DRY mode did not activate within timeout",
-                    {"timeout": self.config["max_wait_time"]}
+                    {
+                        "timeout": self.config["max_wait_time"],
+                        "final_state": diag
+                    }
                 )
 
         except Exception as e:

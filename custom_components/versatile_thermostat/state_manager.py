@@ -126,6 +126,23 @@ class StateManager:
                 self._current_state.set_hvac_mode(VThermHvacMode_OFF)
                 vtherm.set_hvac_off_reason(HVAC_OFF_REASON_WINDOW_DETECTION)
 
+        # Check humidity control BEFORE auto start/stop
+        # This ensures DRY mode can activate even when auto start/stop would turn it off
+        # Humidity control should take priority when humidity is too high
+        elif vtherm.humidity_manager and vtherm.humidity_manager.is_configured and vtherm.ac_mode and self._requested_state.hvac_mode == VThermHvacMode_COOL:
+            # Let humidity_manager decide if DRY mode should be used
+            # Also verify DRY mode is available as a defensive check
+            if vtherm.humidity_manager.should_use_dry_mode(self._requested_state.hvac_mode) and VThermHvacMode_DRY in vtherm.vtherm_hvac_modes:
+                self._current_state.set_hvac_mode(VThermHvacMode_DRY)
+                # Set reason when current_state differs from requested_state
+                vtherm.set_hvac_reason(HVAC_REASON_DRY_HUMIDITY_TOO_HIGH)
+            else:
+                # Use requested COOL mode
+                self._current_state.set_hvac_mode(self._requested_state.hvac_mode)
+                # Clear reason when using requested mode
+                if self._current_state.hvac_mode == self._requested_state.hvac_mode:
+                    vtherm.set_hvac_reason(None)
+
         elif vtherm.auto_start_stop_manager and vtherm.auto_start_stop_manager.is_auto_stop_detected and self._requested_state.hvac_mode != VThermHvacMode_OFF:
             self._current_state.set_hvac_mode(VThermHvacMode_OFF)
             vtherm.set_hvac_off_reason(HVAC_OFF_REASON_AUTO_START_STOP)
@@ -149,21 +166,6 @@ class StateManager:
                 self._current_state.set_hvac_mode(VThermHvacMode_OFF)
             elif vtherm.vtherm_hvac_mode != VThermHvacMode_HEAT and VThermHvacMode_HEAT in vtherm.vtherm_hvac_modes:
                 self._current_state.set_hvac_mode(VThermHvacMode_HEAT)
-
-        # Check humidity control - delegate business logic to humidity_manager
-        elif vtherm.humidity_manager and vtherm.humidity_manager.is_configured and vtherm.ac_mode and self._requested_state.hvac_mode == VThermHvacMode_COOL:
-            # Let humidity_manager decide if DRY mode should be used
-            # Also verify DRY mode is available as a defensive check
-            if vtherm.humidity_manager.should_use_dry_mode(self._requested_state.hvac_mode) and VThermHvacMode_DRY in vtherm.vtherm_hvac_modes:
-                self._current_state.set_hvac_mode(VThermHvacMode_DRY)
-                # Set reason when current_state differs from requested_state
-                vtherm.set_hvac_reason(HVAC_REASON_DRY_HUMIDITY_TOO_HIGH)
-            else:
-                # Use requested COOL mode
-                self._current_state.set_hvac_mode(self._requested_state.hvac_mode)
-                # Clear reason when using requested mode
-                if self._current_state.hvac_mode == self._requested_state.hvac_mode:
-                    vtherm.set_hvac_reason(None)
 
         # all is fine set current_state = requested_state
         else:
